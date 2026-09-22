@@ -1,16 +1,77 @@
-# HELIOS Aircraft Corporation | Intelligent Predictive Operations Initiative
+# HELIOS Aircraft Corporation: Intelligent Predictive Operations Initiative
+
+## Table of Contents
+
+1. [Executive Summary](#executive-summary)
+2. [Project Rationale: Why HELIOS Exists](#project-rationale-why-helios-exists)
+3. [Architecture Overview](#architecture-overview)
+4. [Data Pipeline and Workflow](#data-pipeline-and-workflow)
+5. [Data Dictionary](#data-dictionary)
+6. [Setup and Deployment](#setup-and-deployment)
+7. [Query Examples and Analytics](#query-examples-and-analytics)
+8. [Access Control and Governance](#access-control-and-governance)
+9. [Advanced Topics](#advanced-topics)
+10. [Business Case and Return on Investment](#business-case-and-return-on-investment)
+11. [Support and Maintenance](#support-and-maintenance)
+12. [Integration with BI and Analytics Platforms](#integration-with-bi-and-analytics-platforms)
+13. [Future Enhancements and Roadmap](#future-enhancements-and-roadmap)
+14. [Conclusion](#conclusion)
+15. [License](#license)
+16. [Contact and Support](#contact-and-support)
+
+---
 
 ## Executive Summary
 
-**HELIOS** is an enterprise-grade, SQL-native machine learning platform designed to transform component health monitoring and maintenance planning across commercial aviation fleets. By combining PostgreSQL's advanced analytical capabilities, in-database machine learning, and comprehensive data governance, this system enables **predictive maintenance scheduling, risk-stratified component retirement, and supply-chain optimization** — delivering measurable operational savings and enhanced safety outcomes.
+HELIOS is an enterprise grade, SQL native machine learning platform designed to transform component health monitoring and maintenance planning across commercial aviation fleets. By combining PostgreSQL's advanced analytical capabilities, in database machine learning, and comprehensive data governance, this system enables predictive maintenance scheduling, risk stratified component retirement, and supply chain optimization, delivering measurable operational savings and enhanced safety outcomes.
 
 ### Business Impact
 
-- **Predictive Maintenance Windows**: Replace reactive maintenance with data-driven forecasting of component failures within 30, 60, and 90-day horizons
-- **Asset Utilization Optimization**: Maximize flight hours per component before planned removal, reducing unscheduled downtime by an estimated **15–25%**
-- **Supply Chain Efficiency**: Align parts procurement and inventory to predicted demand, reducing carrying costs and stockouts
-- **Safety & Compliance**: Automated data quality enforcement and immutable audit trails satisfy regulatory (14 CFR, EASA) and internal compliance requirements
-- **Decision Support**: Risk-stratified component rankings and explanatory feature importance for maintenance teams and flight operations
+- **Predictive maintenance windows.** Replace reactive maintenance with data driven forecasting of component failures within 30, 60, and 90 day horizons.
+- **Asset utilization optimization.** Maximize flight hours per component before planned removal, reducing unscheduled downtime by an estimated 15 to 25 percent.
+- **Supply chain efficiency.** Align parts procurement and inventory to predicted demand, reducing carrying costs and stockouts.
+- **Safety and compliance.** Automated data quality enforcement and immutable audit trails satisfy regulatory (14 CFR, EASA) and internal compliance requirements.
+- **Decision support.** Risk stratified component rankings and explanatory feature importance for maintenance teams and flight operations.
+
+---
+
+## Project Rationale: Why HELIOS Exists
+
+### The State of Aircraft Component Maintenance Today
+
+Commercial aviation has historically managed component health through two dominant paradigms, and both leave meaningful value and safety margin on the table. The first is calendar based, or hard time, maintenance, in which a component is removed and overhauled on a fixed schedule regardless of its actual condition. This is safe by design, since it is built around conservative design life assumptions, but it is also wasteful: a large share of components removed under a hard time schedule still have substantial remaining useful life, representing scrapped value and unnecessary labor. The second paradigm is reactive maintenance, in which a component is serviced only after it degrades enough to trigger a fault code, a pilot report, or an outright failure. Reactive maintenance is inexpensive when nothing goes wrong, but it concentrates risk at exactly the wrong moment, since a failure discovered in service, rather than on the ground during a scheduled check, is the costliest and least safe way for a defect to surface.
+
+Predictive maintenance, the paradigm HELIOS is built around, sits between these two extremes. Rather than servicing a component on a fixed calendar or waiting for it to fail, the goal is to estimate, from live operating data, how much useful life a specific component has left, and to schedule its removal proactively, close to the point where risk begins to rise, but before it does. This is not a new idea in principle. What has changed is that modern aircraft generate the telemetry, in the form of vibration, temperature, pressure, and oil debris sensors, that makes a data driven estimate of remaining useful life genuinely more informative than either a fixed calendar or a wait and see approach. The opportunity HELIOS addresses is turning that telemetry, which airlines already collect, into a governed, auditable, and operationally trustworthy prediction that a maintenance planner can act on with confidence.
+
+### Why This Is a Data Engineering Problem, Not Just a Modeling Problem
+
+A recurring failure mode in industrial predictive maintenance initiatives is that a data science team builds an accurate model in a notebook, and the model never makes it into a trustworthy production decision. The reason is rarely the model itself. It is almost always the surrounding infrastructure: the data pipeline feeding the model has no quality gate, so a batch of corrupted sensor readings can silently degrade a live prediction; the feature computation lives in an untracked script, so nobody can reproduce last month's scores; the model has no registered version or documented limitations, so a maintenance planner has no way to know whether to trust it; and there is no audit trail, so a regulator or an internal safety review has no way to reconstruct why a particular component was, or was not, flagged as high risk.
+
+HELIOS is deliberately architected to treat these concerns as first class requirements rather than afterthoughts. The data quality framework, the model registry, the immutable audit log, and the drift monitoring described throughout this document exist because, in an aviation context, an unreliable or unauditable prediction is arguably worse than no prediction at all. A maintenance team that learns to distrust a black box tool will quietly revert to the calendar based schedule it was meant to replace, and the investment in building it will have produced no safety or cost benefit whatsoever. The design priority throughout HELIOS is therefore not only predictive accuracy, but predictive accuracy that a skeptical maintenance engineer, a compliance auditor, and a regulator can all independently verify.
+
+### Why an In Database, SQL Native Architecture
+
+A conventional machine learning stack typically separates the database, which holds the data, from a separate machine learning platform, often built on Python and a collection of external services, where features are engineered, models are trained, and predictions are produced. HELIOS deliberately rejects that separation and instead performs ingestion, data quality enforcement, feature engineering, model training, scoring, and monitoring entirely inside PostgreSQL, using PostgresML for in database gradient boosted tree training. This is an unusual architectural choice, and it was made for specific, defensible reasons rather than as a novelty:
+
+- **A single source of truth for governance.** When features, models, and predictions all live in the same database as the underlying fact and dimension tables, role based access control, audit logging, and data lineage apply uniformly across the entire pipeline, rather than needing to be separately implemented and kept in sync across a database and an external ML service.
+- **Lower operational surface area.** There is no separate feature store, model serving cluster, or orchestration layer to provision, secure, monitor, and keep available. For a mid sized aviation MRO or fleet operations team, that translates directly into lower infrastructure cost and fewer systems that can independently fail.
+- **Reproducibility by construction.** Because every feature is a versioned SQL function and every model is trained against a specific, queryable feature table snapshot, reproducing a historical prediction, or explaining to an auditor exactly how a given score was produced, is a matter of rerunning a documented SQL statement rather than reconstructing an external pipeline's state at a point in time.
+- **A natural fit for the consumption pattern.** The eventual consumers of these predictions are maintenance planners and business intelligence dashboards, both of which already query PostgreSQL directly or through BI tools such as Power BI or Tableau. Keeping predictions in the same database they already query removes an entire integration layer.
+
+The tradeoff, and it is a real one, is that PostgresML's XGBoost implementation and PL/pgSQL are less expressive than a full Python machine learning stack, and this repository is explicit about that limitation rather than hiding it. The [Future Enhancements and Roadmap](#future-enhancements-and-roadmap) section below describes where an external service, for example for SHAP based explainability at scale or for a more sophisticated ensemble, may eventually be justified. The architectural default, however, is to keep everything in SQL until there is a specific, demonstrated reason not to, because every component pulled out of the database is a component that has to be separately governed, secured, and kept consistent with everything else.
+
+### Why Predictive Maintenance Matters Specifically for Aviation
+
+The business case for predictive maintenance exists across many industrial sectors, but the stakes and the constraints are distinctive in commercial aviation, and that distinctiveness shapes several of HELIOS's design decisions:
+
+- **Safety is non negotiable, but it is also not the only variable.** A predictive model that is wrong in the unsafe direction, meaning it fails to flag a component that goes on to fail in service, is unacceptable regardless of how much money it saves elsewhere. This is why the risk tier logic in this system is deliberately conservative and deterministic, why classifier thresholds are tuned toward recall rather than precision for the highest risk tiers, and why every prediction is explicitly framed as decision support for a human maintenance planner rather than as an autonomous removal trigger.
+- **The cost of unscheduled downtime is asymmetric and large.** An aircraft grounded unexpectedly does not just cost the price of the repair; it cascades into missed flights, crew repositioning, passenger compensation, and schedule disruption across a hub. This asymmetry is why the business case in this document weights the value of shifting even a modest share of unscheduled removals to scheduled ones so heavily.
+- **Regulatory and audit requirements are strict and well defined.** Under frameworks such as 14 CFR Part 121 in the United States and EASA regulations in Europe, maintenance decisions must be traceable, and data used to support them must be demonstrably governed. This is why HELIOS treats its audit trail, its data quality rule catalog, and its model registry as core product features rather than optional add ons; they are what make a predictive maintenance recommendation admissible as part of a documented maintenance decision, rather than an informal suggestion a team is free to ignore or cannot defend under audit.
+- **Component economics reward precision.** Aviation components, particularly engines, APUs, and major hydraulic and avionics assemblies, are expensive enough that even a modest improvement in how accurately their remaining useful life is estimated has a direct, quantifiable effect on both maintenance spend and spare parts inventory carrying cost, which is why this document reports specific, itemized financial targets in the [Business Case and Return on Investment](#business-case-and-return-on-investment) section rather than only a qualitative claim of value.
+
+### What Success Looks Like
+
+HELIOS is judged successful not when it produces a model with a strong offline accuracy metric, but when a maintenance planning team routinely uses its risk tier rankings to decide which components to inspect or replace next, when its predictions survive scrutiny from a compliance audit, and when its drift monitoring catches a degrading model before that degradation translates into a missed failure or a wasted early removal. The remainder of this document describes, in technical detail, how the platform is built to meet that bar: a governed data pipeline, versioned features, a registered and monitored set of models, and an audit trail sufficient to satisfy both an internal reliability engineering review and an external regulatory one.
 
 ---
 
@@ -18,182 +79,179 @@
 
 ### System Design Philosophy
 
-The HELIOS platform follows a **modular, SQL-first architecture** that maximizes PostgreSQL's analytical and ML capabilities:
+The HELIOS platform follows a modular, SQL first architecture that maximizes PostgreSQL's analytical and machine learning capabilities:
 
-1. **Landing Zone** (`raw` schema): Untransformed source extracts from MRO, ERP, and health-monitoring systems
-2. **Curated Foundation** (`curated` schema): Conformed, governed dimensional and fact tables with automated data quality gates
-3. **Feature Engineering** (`features` schema): Versioned, model-ready datasets built entirely with SQL window functions and domain-driven ratios
-4. **Model Registry & Lifecycle** (`models` schema): Structured model cards, hyperparameters, and performance metadata
-5. **Prediction & Scoring** (`predictions` schema): Batch scoring output with risk tiers and contributing factors for BI consumption
-6. **Monitoring & Observability** (`monitoring` schema): Drift detection, performance tracking, and alerting — all SQL-computed
+1. **Landing zone** (`raw` schema): untransformed source extracts from MRO, ERP, and health monitoring systems.
+2. **Curated foundation** (`curated` schema): conformed, governed dimensional and fact tables with automated data quality gates.
+3. **Feature engineering** (`features` schema): versioned, model ready datasets built entirely with SQL window functions and domain driven ratios.
+4. **Model registry and lifecycle** (`models` schema): structured model cards, hyperparameters, and performance metadata.
+5. **Prediction and scoring** (`predictions` schema): batch scoring output with risk tiers and contributing factors for BI consumption.
+6. **Monitoring and observability** (`monitoring` schema): drift detection, performance tracking, and alerting, all computed in SQL.
 
 ### Technical Stack
 
-- **Language**: PLpgSQL (PostgreSQL 15+)
-- **Core Platform**: PostgreSQL with table partitioning, native triggers, and ROLE-based access control
-- **ML Runtime**: PostgresML (in-database gradient-boosted trees via XGBoost)
-- **Scheduling**: pg_cron for automated feature refresh, drift checks, and retraining triggers
-- **Data Quality**: Declarative rule engine with quarantine routing and compliance logging
+- **Language:** PL/pgSQL (PostgreSQL 15 or later)
+- **Core platform:** PostgreSQL, with table partitioning, native triggers, and role based access control
+- **ML runtime:** PostgresML (in database gradient boosted trees, via XGBoost)
+- **Scheduling:** pg_cron, for automated feature refresh, drift checks, and retraining triggers
+- **Data quality:** a declarative rule engine with quarantine routing and compliance logging
 
-### Entity-Relationship Design
+### Entity Relationship Design
 
 ```
 dim_aircraft (one per tail number)
-  └─ fact_component_health_snapshot (time-series, partitioned monthly)
-       ├─ dim_component (one per serial number)
-       │   └─ dim_supplier (one per supplier ID)
-       └─ [joins to features & models for inference]
+  |- fact_component_health_snapshot (time series, partitioned monthly)
+       |- dim_component (one per serial number)
+       |    |- dim_supplier (one per supplier ID)
+       |- [joins to features and models for inference]
 ```
 
 ---
 
-## Data Pipeline & Workflow
+## Data Pipeline and Workflow
 
-### Phase 1: Data Ingestion & Quality Assurance (Script 01 & 02)
+### Phase 1: Data Ingestion and Quality Assurance (Scripts 01 and 02)
 
-**`01_schema_and_tables.sql`** — Initialize the data warehouse:
+**`01_schema_and_tables.sql`: initializes the data warehouse.**
 
-- **Schemas**: Establish 7 purpose-built schemas with granular data governance
-- **Dimensions**: Master data for aircraft (tail numbers, fleet composition), components (serial numbers, design MTBF), and suppliers
-- **Fact Table**: Partitioned monthly fact table tracking component health snapshots across the fleet
-- **Data Quality Framework**: Declarative rule catalog with 7 built-in checks (completeness, validity, uniqueness, consistency, referential integrity)
-- **Role-Based Access Control**: Four roles (data engineer, ML engineer, BI reader, auditor) with schema-level and table-level permissions
-- **Audit Trail**: Immutable, append-only audit log for all mutations to the fact table
+- **Schemas:** establishes 7 purpose built schemas with granular data governance.
+- **Dimensions:** master data for aircraft (tail numbers, fleet composition), components (serial numbers, design MTBF), and suppliers.
+- **Fact table:** a partitioned monthly fact table tracking component health snapshots across the fleet.
+- **Data quality framework:** a declarative rule catalog with 7 built in checks, covering completeness, validity, uniqueness, consistency, and referential integrity.
+- **Role based access control:** four roles (data engineer, ML engineer, BI reader, auditor) with schema level and table level permissions.
+- **Audit trail:** an immutable, append only audit log for all mutations to the fact table.
 
-**`02_load_and_transform.sql`** — Transform and govern the source extract:
+**`02_load_and_transform.sql`: transforms and governs the source extract.**
 
-- **CSV Ingestion**: Load from the source Excel/CSV export into the raw staging table
-- **Quality Gate**: Execute all 7 DQ rules; failures route to quarantine; pass-rate metrics logged for dashboards
-- **Master Data Upsert**: Idempotent inserts/updates for aircraft, components, and suppliers (CONFLICT clauses allow re-runs)
-- **Fact Table Promotion**: Transform raw into curated fact table with foreign key references to dimensions
-- **Sanity Checks**: Count verifications by table to confirm load completeness
+- **CSV ingestion:** loads from the source Excel or CSV export into the raw staging table.
+- **The quality gate:** executes all 7 data quality rules; failures route to quarantine, and pass rate metrics are logged for dashboards.
+- **Master data upsert:** idempotent inserts and updates for aircraft, components, and suppliers, using CONFLICT clauses that allow safe re runs.
+- **Fact table promotion:** transforms raw data into the curated fact table, with foreign key references to the dimensions.
+- **Sanity checks:** count verifications by table, to confirm load completeness.
 
-**Key Mechanisms**:
-- Temporal partitioning (monthly ranges) for efficient queries and archive/retention
-- Quarantine table isolates data quality failures without blocking downstream processing
-- Triggers auto-update `updated_at` timestamps on dimension tables
+**Key mechanisms:**
 
-### Phase 2: Feature Engineering & Model Training (Script 03)
+- Temporal partitioning (monthly ranges), for efficient queries and archival or retention management.
+- A quarantine table that isolates data quality failures without blocking downstream processing.
+- Triggers that automatically update `updated_at` timestamps on dimension tables.
 
-**`03_features_and_ml.sql`** — Build ML-ready datasets and train ensemble models:
+### Phase 2: Feature Engineering and Model Training (Script 03)
 
-**Feature Engineering** (SQL window functions, domain-driven ratios):
+**`03_features_and_ml.sql`: builds machine learning ready datasets and trains ensemble models.**
 
-| Feature | Derivation | Business Meaning |
-|---------|-----------|-----------------|
-| `pct_of_design_life_consumed` | cumulative_flight_hours / design_mtbf_hours | Lifecycle progression as % of rated MTBF |
-| `hours_per_cycle` | cumulative_flight_hours / cumulative_flight_cycles | Mechanical stress intensity per flight |
-| `unscheduled_removal_ratio` | prior_unscheduled / prior_removal_count | Reliability indicator (higher → more unexpected failures) |
-| `sensor_composite_risk_score` | 0.40×vibration + 0.35×oil_debris + 0.25×anomalies | Weighted health sensor fusion |
-| `maintenance_recency_score` | exp(−days_since_maintenance/90) | Exponential decay of maintenance benefit |
-| `rolling_30d_component_type_failure_rate` | Window avg of failure_within_90_days by component_type | Cohort-level risk trend |
+**Feature engineering** (SQL window functions and domain driven ratios):
 
-**Three Production Models** (trained via PostgresML XGBoost):
+| Feature | Derivation | Business meaning |
+|---|---|---|
+| `pct_of_design_life_consumed` | cumulative_flight_hours divided by design_mtbf_hours | Lifecycle progression as a percentage of rated MTBF |
+| `hours_per_cycle` | cumulative_flight_hours divided by cumulative_flight_cycles | Mechanical stress intensity per flight |
+| `unscheduled_removal_ratio` | prior_unscheduled divided by prior_removal_count | A reliability indicator; higher values mean more unexpected failures |
+| `sensor_composite_risk_score` | 0.40 times vibration, plus 0.35 times oil debris, plus 0.25 times anomalies | A weighted health sensor fusion |
+| `maintenance_recency_score` | exp(negative days_since_maintenance divided by 90) | The exponential decay of maintenance benefit over time |
+| `rolling_30d_component_type_failure_rate` | A windowed average of failure_within_90_days by component_type | A cohort level risk trend |
 
-1. **RUL Regression** (`helios_component_rul_regression`): Predict remaining useful life in days
-   - Algorithm: XGBoost (n_estimators=300, max_depth=6, learning_rate=0.05)
-   - Target: `remaining_useful_life_days`
-   - Use Case: Optimize maintenance scheduling windows
-   
-2. **90-Day Failure Classifier** (`helios_component_failure_90d_classification`): Probability of failure within 90 days
-   - Algorithm: XGBoost (n_estimators=300, max_depth=5)
-   - Target: `failure_within_90_days` (binary label)
-   - Use Case: Proactive inspection planning
-   - Handling: Class imbalance (~9% positive rate); recommend recall-tuned thresholds
-   
-3. **30-Day Failure Classifier** (`helios_component_failure_30d_classification`): Urgent near-term risk
-   - Algorithm: XGBoost (n_estimators=250, max_depth=5)
-   - Target: `failure_within_30_days` (binary label)
-   - Use Case: Immediate triage and parts pre-positioning
-   - Handling: Severe class imbalance (~4% positive rate)
+**Three production models**, trained through PostgresML's XGBoost integration:
 
-**Train/Validation/Test Split** (Temporal):
+1. **RUL regression** (`helios_component_rul_regression`): predicts remaining useful life in days.
+   - Algorithm: XGBoost, with `n_estimators` of 300, `max_depth` of 6, and a learning rate of 0.05.
+   - Target: `remaining_useful_life_days`.
+   - Use case: optimizing maintenance scheduling windows.
 
-- **Train**: All records before MAX(snapshot_date) − 120 days
-- **Validation**: Records 120 to 60 days before present
-- **Test**: Records within last 60 days
-- Rationale: Preserves temporal order; validates out-of-sample performance on recent, unseen data
+2. **The 90 day failure classifier** (`helios_component_failure_90d_classification`): estimates the probability of failure within 90 days.
+   - Algorithm: XGBoost, with `n_estimators` of 300 and `max_depth` of 5.
+   - Target: `failure_within_90_days` (a binary label).
+   - Use case: proactive inspection planning.
+   - Handling: class imbalance, with an approximately 9 percent positive rate; recall tuned thresholds are recommended.
 
-**Model Registry** (Structured metadata):
+3. **The 30 day failure classifier** (`helios_component_failure_30d_classification`): estimates urgent, near term risk.
+   - Algorithm: XGBoost, with `n_estimators` of 250 and `max_depth` of 5.
+   - Target: `failure_within_30_days` (a binary label).
+   - Use case: immediate triage and parts pre positioning.
+   - Handling: severe class imbalance, with an approximately 4 percent positive rate.
 
-Each trained model is registered with:
-- Hyperparameters, training data summary (row counts)
-- Intended use, known limitations, risk classification
-- is_active flag for production eligibility
-- Trained_at timestamp and trained_by user attribution
+**The train, validation, and test split** (temporal):
 
-### Phase 3: Scoring & Decision Support (Script 03 Continued)
+- **Train:** all records before the maximum snapshot_date minus 120 days.
+- **Validation:** records from 120 to 60 days before the present.
+- **Test:** records within the last 60 days.
+- **Rationale:** this preserves temporal order and validates out of sample performance on recent, unseen data, rather than allowing information from the future to leak into training.
 
-**Batch Prediction Loop**:
+**The model registry** (structured metadata):
+
+Each trained model is registered with its hyperparameters, a summary of its training data (including row counts), its intended use, its known limitations, its risk classification, an `is_active` flag governing production eligibility, and a `trained_at` timestamp together with `trained_by` user attribution.
+
+### Phase 3: Scoring and Decision Support (Script 03, Continued)
+
+**The batch prediction loop:**
 
 ```sql
 INSERT INTO predictions.component_rul_predictions
   (record_id, component_serial_number, snapshot_date, model_name, model_version,
    predicted_rul_days, predicted_failure_prob_30d, predicted_failure_prob_90d, risk_tier)
 SELECT <features> FROM features.component_health_test t
-  WHERE pgml.predict('helios_component_rul_regression', ROW(t.*)) → predicted_rul_days
+  WHERE pgml.predict('helios_component_rul_regression', ROW(t.*)) -> predicted_rul_days
 ```
 
-**Risk Tier Logic** (Deterministic in SQL):
+**The risk tier logic** (deterministic, computed in SQL):
 
 ```
-IF predicted_failure_prob_30d > 0.5  → "High"
-ELSE IF predicted_failure_prob_90d > 0.5 → "Elevated"
-ELSE IF predicted_failure_prob_90d > 0.2 → "Watch"
-ELSE → "Low"
+IF predicted_failure_prob_30d > 0.5  -> "High"
+ELSE IF predicted_failure_prob_90d > 0.5 -> "Elevated"
+ELSE IF predicted_failure_prob_90d > 0.2 -> "Watch"
+ELSE -> "Low"
 ```
 
-**Output Fields**:
+**Output fields:**
 
-- `predicted_rul_days`: Point estimate for maintenance scheduling
-- `predicted_failure_prob_30d`, `predicted_failure_prob_90d`: Risk probabilities
-- `risk_tier`: Actionable category for dispatch/fleet planning
-- `top_contributing_factors`: JSONB-serialized feature importance (Shapley values in extended versions)
+- `predicted_rul_days`: a point estimate used for maintenance scheduling.
+- `predicted_failure_prob_30d`, `predicted_failure_prob_90d`: risk probabilities.
+- `risk_tier`: an actionable category for dispatch and fleet planning.
+- `top_contributing_factors`: JSONB serialized feature importance (Shapley values, in extended versions of the platform).
 
-### Phase 4: Monitoring, Drift Detection, & Retraining (Script 04)
+### Phase 4: Monitoring, Drift Detection, and Retraining (Script 04)
 
-**`04_monitoring_and_retraining.sql`** — Sustain model accuracy and data quality:
+**`04_monitoring_and_retraining.sql`: sustains model accuracy and data quality.**
 
-**Model Performance Tracking**:
+**Model performance tracking:**
 
-- **RUL Metrics**: RMSE and MAE against known outcomes in the test set
-- **Classifier Metrics**: Precision and Recall @ 0.5 threshold decision boundary
-- **Alert Thresholds**:
-  - RMSE > 150 days → Warning
-  - Recall < 0.60 → Critical (schedule retraining review)
-- **Evaluation Window**: Configurable date ranges per model
+- **RUL metrics:** RMSE and MAE, computed against known outcomes in the test set.
+- **Classifier metrics:** precision and recall, at a 0.5 threshold decision boundary.
+- **Alert thresholds:**
+  - RMSE above 150 days triggers a Warning.
+  - Recall below 0.60 triggers a Critical alert, prompting a retraining review.
+- **The evaluation window** is configurable per model, allowing date ranges to be adjusted as needed.
 
-**Data Drift Detection** (mean-shift test on key features):
+**Data drift detection** (a mean shift test on key features):
 
-Features monitored: `health_monitoring_score`, `sensor_vibration_index`, `sensor_oil_debris_index`, `anomaly_count_last_30_days`
+Features monitored: `health_monitoring_score`, `sensor_vibration_index`, `sensor_oil_debris_index`, and `anomaly_count_last_30_days`.
 
 ```sql
--- Reference: 90+ days before present
--- Current: Last 30 days
--- Drift Threshold: >15% change triggers alert
+-- Reference: 90 or more days before present
+-- Current: the last 30 days
+-- Drift threshold: a change greater than 15 percent triggers an alert
 ```
 
-**Automated Alerting**:
+**Automated alerting:**
 
-- Alert types: Data Quality, Data Drift, Model Performance, Prediction Volume
-- Severity levels: Info, Warning, Critical
-- Consumption: Power BI dashboards (executive risk dashboard, reliability-engineering dashboard)
-- Human review override: Captured in `models.human_review_overrides` table for feedback loops
+- Alert types: Data Quality, Data Drift, Model Performance, Prediction Volume.
+- Severity levels: Info, Warning, Critical.
+- Consumption: Power BI dashboards (an executive risk dashboard and a reliability engineering dashboard).
+- Human review override: captured in the `models.human_review_overrides` table, to support feedback loops.
 
-**Scheduled Jobs** (via pg_cron):
+**Scheduled jobs**, run through pg_cron:
 
 | Job | Frequency | Action |
-|-----|-----------|--------|
-| Feature Refresh | Nightly 02:00 UTC | Rebuild component_health_features_v1 from raw + curated data |
-| Drift Check | Nightly 02:15 UTC | Run feature distribution tests; log alerts if >15% shift |
-| Model Eval | Weekly (Monday 03:00) | Compute RMSE/MAE/Precision/Recall; log to monitoring tables |
-| Partition Ensure | Monthly (1st @ 00:00) | Create next month's fact-table partition proactively |
+|---|---|---|
+| Feature refresh | Nightly, 02:00 UTC | Rebuild `component_health_features_v1` from raw and curated data |
+| Drift check | Nightly, 02:15 UTC | Run feature distribution tests; log alerts if the shift exceeds 15 percent |
+| Model evaluation | Weekly, Monday 03:00 | Compute RMSE, MAE, precision, and recall; log to the monitoring tables |
+| Partition ensure | Monthly, the 1st at 00:00 | Proactively create next month's fact table partition |
 
-**Retraining Trigger Logic**:
+**Retraining trigger logic:**
 
 ```sql
 SELECT model_name, reason FROM mgmt.retraining_required()
--- Returns any model with unacknowledged warnings/critical alerts raised in last 7 days
+-- Returns any model with unacknowledged warning or critical alerts raised in the last 7 days
 ```
 
 ---
@@ -205,156 +263,158 @@ SELECT model_name, reason FROM mgmt.retraining_required()
 #### `curated.dim_aircraft`
 
 | Column | Type | Constraint | Semantics |
-|--------|------|-----------|-----------|
-| aircraft_tail_number | TEXT | PK | ICAO registration (e.g., N12345) |
-| aircraft_model | TEXT | NOT NULL | Airbus/Boeing model (A320, 787, etc.) |
-| fleet_type | TEXT | NOT NULL | Narrowbody, Regional, or Specialized-Mission |
-| aircraft_age_years | NUMERIC(6,2) | ≥ 0 | Years since manufacture |
-| operating_region | TEXT | NOT NULL | Geographic base (e.g., North America, Europe) |
-| operating_environment | TEXT | NOT NULL | Desert, Coastal, Temperate, Arctic, Tropical |
-| route_type | TEXT | NOT NULL | Short-, Medium-, Long-haul |
-| avg_daily_utilization_hours | NUMERIC(6,2) | ≥ 0 | Typical daily flight hours |
+|---|---|---|---|
+| aircraft_tail_number | TEXT | Primary key | ICAO registration (for example, N12345) |
+| aircraft_model | TEXT | Not null | Airbus or Boeing model (A320, 787, and so on) |
+| fleet_type | TEXT | Not null | Narrowbody, Regional, or Specialized Mission |
+| aircraft_age_years | NUMERIC(6,2) | 0 or greater | Years since manufacture |
+| operating_region | TEXT | Not null | Geographic base (for example, North America, Europe) |
+| operating_environment | TEXT | Not null | Desert, Coastal, Temperate, Arctic, or Tropical |
+| route_type | TEXT | Not null | Short, medium, or long haul |
+| avg_daily_utilization_hours | NUMERIC(6,2) | 0 or greater | Typical daily flight hours |
 
 #### `curated.dim_component`
 
 | Column | Type | Constraint | Semantics |
-|--------|------|-----------|-----------|
-| component_serial_number | TEXT | PK | Manufacturer serial number |
-| component_type | TEXT | NOT NULL | Engine, APU, Hydraulic, Avionics, Structural, etc. |
-| component_subtype | TEXT | NOT NULL | More specific category (e.g., CF6 Engine) |
-| design_mtbf_hours | NUMERIC(10,1) | > 0 | Mean time between failures per spec sheet |
-| part_cost_usd | NUMERIC(12,2) | ≥ 0 | Acquisition cost (for ROI calculations) |
-| warranty_status | TEXT | In Warranty, Out of Warranty, Extended | Coverage classification |
+|---|---|---|---|
+| component_serial_number | TEXT | Primary key | Manufacturer serial number |
+| component_type | TEXT | Not null | Engine, APU, Hydraulic, Avionics, Structural, and so on |
+| component_subtype | TEXT | Not null | A more specific category (for example, CF6 Engine) |
+| design_mtbf_hours | NUMERIC(10,1) | Greater than 0 | Mean time between failures per specification sheet |
+| part_cost_usd | NUMERIC(12,2) | 0 or greater | Acquisition cost, used for return on investment calculations |
+| warranty_status | TEXT | In Warranty, Out of Warranty, or Extended | Coverage classification |
 | firmware_version | TEXT | Nullable | For electronic components |
 
 #### `curated.dim_supplier`
 
 | Column | Type | Constraint | Semantics |
-|--------|------|-----------|-----------|
-| supplier_id | TEXT | PK | Supplier identifier |
-| supplier_quality_score | NUMERIC(5,1) | [0, 100] | Current quality rating (internal or OEM) |
+|---|---|---|---|
+| supplier_id | TEXT | Primary key | Supplier identifier |
+| supplier_quality_score | NUMERIC(5,1) | 0 to 100 | Current quality rating (internal or OEM sourced) |
 
 ### Key Fact Table
 
 #### `curated.fact_component_health_snapshot`
 
-**Partitioning**: RANGE on `snapshot_date` (monthly), e.g., `fact_component_health_snapshot_2023_06`, `fact_component_health_snapshot_2023_07`, …
+**Partitioning:** by range on `snapshot_date` (monthly), for example `fact_component_health_snapshot_2023_06`, `fact_component_health_snapshot_2023_07`, and so on.
 
 | Column | Type | Semantics |
-|--------|------|-----------|
-| record_id, snapshot_date | PK | Composite key; snapshot_date determines partition |
-| aircraft_tail_number, component_serial_number | FK | Links to dimensions |
+|---|---|---|
+| record_id, snapshot_date | Primary key | A composite key; snapshot_date determines the partition |
+| aircraft_tail_number, component_serial_number | Foreign key | Links to the dimension tables |
 | cumulative_flight_hours, cumulative_flight_cycles | Integer | Total usage since installation |
-| flight_hours_since_last_overhaul | Integer | Stress accumulation since major service |
+| flight_hours_since_last_overhaul | Integer | Stress accumulation since the last major service |
 | prior_removal_count, prior_unscheduled_removal_count | Integer | Reliability history |
-| sensor_vibration_index, sensor_temperature_avg_c, sensor_pressure_avg_psi, sensor_oil_debris_index | NUMERIC | Health sensor telemetry (raw) |
-| health_monitoring_score | NUMERIC [0, 100] | Composite health index |
+| sensor_vibration_index, sensor_temperature_avg_c, sensor_pressure_avg_psi, sensor_oil_debris_index | NUMERIC | Raw health sensor telemetry |
+| health_monitoring_score | NUMERIC, 0 to 100 | A composite health index |
 | anomaly_count_last_30_days | Integer | Number of sensor anomalies detected |
-| remaining_useful_life_days | NUMERIC | Known outcome (ground truth for training) |
-| failure_within_30_days, failure_within_90_days | SMALLINT (0/1) | Binary label (ground truth) |
+| remaining_useful_life_days | NUMERIC | The known outcome, used as ground truth for training |
+| failure_within_30_days, failure_within_90_days | SMALLINT (0 or 1) | Binary labels, used as ground truth |
 
-### Feature Engineering Table
+### The Feature Engineering Table
 
 #### `features.component_health_features_v1`
 
-**Purpose**: Model-ready dataset; one row per component per snapshot_date. Rebuilt nightly by `features.build_component_health_features_v1()`.
+**Purpose:** a model ready dataset, with one row per component per snapshot_date. Rebuilt nightly by `features.build_component_health_features_v1()`.
 
-**Includes**:
-- All raw fact-table columns
-- Engineered features (pct_of_design_life_consumed, hours_per_cycle, sensor_composite_risk_score, etc.)
-- Labels (remaining_useful_life_days, failure_within_30_days, failure_within_90_days)
-- feature_version, computed_at timestamp
+**Includes:**
 
-### Predictions & Monitoring Tables
+- All raw fact table columns.
+- Engineered features (`pct_of_design_life_consumed`, `hours_per_cycle`, `sensor_composite_risk_score`, and others).
+- Labels (`remaining_useful_life_days`, `failure_within_30_days`, `failure_within_90_days`).
+- A `feature_version` field and a `computed_at` timestamp.
+
+### Predictions and Monitoring Tables
 
 #### `predictions.component_rul_predictions`
 
 | Column | Semantics |
-|--------|-----------|
-| prediction_id | Unique prediction record |
+|---|---|
+| prediction_id | A unique prediction record |
 | record_id, component_serial_number, snapshot_date | Joinable to features for evaluation |
-| predicted_rul_days | Point estimate in days |
-| predicted_failure_prob_30d, predicted_failure_prob_90d | Probability scores [0, 1] |
-| risk_tier | Categorical: Low, Watch, Elevated, High |
-| scored_at | Timestamp of scoring run |
+| predicted_rul_days | A point estimate, in days |
+| predicted_failure_prob_30d, predicted_failure_prob_90d | Probability scores, from 0 to 1 |
+| risk_tier | Categorical: Low, Watch, Elevated, or High |
+| scored_at | The timestamp of the scoring run |
 
 #### `monitoring.data_quality_rules`
 
 | Column | Semantics |
-|--------|-----------|
-| rule_name | e.g., "health_score_out_of_range", "negative_usage_hours" |
-| rule_category | Completeness, Validity, Consistency, Uniqueness, Referential Integrity |
-| rule_sql | WHERE clause identifying failing rows |
-| severity | Warning or Critical (Critical blocks promotion to curated) |
+|---|---|
+| rule_name | For example, "health_score_out_of_range" or "negative_usage_hours" |
+| rule_category | Completeness, Validity, Consistency, Uniqueness, or Referential Integrity |
+| rule_sql | The WHERE clause identifying failing rows |
+| severity | Warning or Critical (a Critical rule blocks promotion to curated) |
 
 #### `monitoring.model_performance_log`
 
 | Column | Semantics |
-|--------|-----------|
-| model_name, model_version | References models.model_registry |
-| metric_name | RMSE, MAE, AUC, F1, Precision, Recall |
-| metric_value | Numeric score |
-| evaluation_window_start, evaluation_window_end | Date range for metric |
+|---|---|
+| model_name, model_version | References `models.model_registry` |
+| metric_name | RMSE, MAE, AUC, F1, Precision, or Recall |
+| metric_value | The numeric score |
+| evaluation_window_start, evaluation_window_end | The date range covered by the metric |
 
 #### `monitoring.alerts`
 
 | Column | Semantics |
-|--------|-----------|
-| alert_type | Data Quality, Data Drift, Model Performance, Prediction Volume |
-| severity | Info, Warning, Critical |
-| related_entity | Component ID, feature name, model name, etc. |
-| acknowledged, acknowledged_by, acknowledged_at | Human review loop |
+|---|---|
+| alert_type | Data Quality, Data Drift, Model Performance, or Prediction Volume |
+| severity | Info, Warning, or Critical |
+| related_entity | Component ID, feature name, model name, and so on |
+| acknowledged, acknowledged_by, acknowledged_at | The human review loop |
 
 ---
 
-## Setup & Deployment
+## Setup and Deployment
 
 ### Prerequisites
 
-1. **PostgreSQL 15+** with superuser access for extension installation
-   
+1. **PostgreSQL 15 or later**, with superuser access for extension installation.
+
    ```bash
-   SELECT version();  -- Confirm PostgreSQL 15+
+   SELECT version();  -- confirm PostgreSQL 15 or later
    ```
 
-2. **Required Extensions**:
-   
+2. **Required extensions:**
+
    ```sql
    CREATE EXTENSION IF NOT EXISTS pgcrypto;           -- gen_random_uuid(), hashing
-   CREATE EXTENSION IF NOT EXISTS pg_stat_statements; -- Query performance analysis
+   CREATE EXTENSION IF NOT EXISTS pg_stat_statements; -- query performance analysis
    CREATE EXTENSION IF NOT EXISTS pgml;               -- PostgresML (in-database ML)
-   CREATE EXTENSION IF NOT EXISTS pg_cron;            -- Scheduled jobs
+   CREATE EXTENSION IF NOT EXISTS pg_cron;            -- scheduled jobs
    ```
 
-3. **Source Data**: 
-   - `Helios_Component_Health_Dataset.xlsx` exported to `component_health_dataset.csv`
-   - File must be accessible from the machine running psql (client-side \copy)
+3. **Source data:**
+   - `Helios_Component_Health_Dataset.xlsx`, exported to `component_health_dataset.csv`.
+   - The file must be accessible from the machine running `psql` (client side `\copy`).
 
 ### Installation Steps
 
-#### Step 1: Initialize Schema & Data Model (Script 01)
+#### Step 1: Initialize the Schema and Data Model (Script 01)
 
 ```bash
 psql -h <postgres_host> -U <admin_user> -d <database> -f 01_schema_and_tables.sql
 ```
 
-**Output**: 7 schemas, 9 tables, 3 roles, audit triggers, data quality rules
+**Output:** 7 schemas, 9 tables, 3 roles, audit triggers, and the data quality rule set.
 
-#### Step 2: Load & Transform Data (Script 02)
+#### Step 2: Load and Transform Data (Script 02)
 
 ```bash
-# Adjust the file path in script if needed (line 19: \copy command)
+# Adjust the file path in the script if needed (line 19: the \copy command)
 psql -h <postgres_host> -U <admin_user> -d <database> -f 02_load_and_transform.sql
 ```
 
-**Output**:
-- raw.component_health_stg: Raw extract
-- curated.dim_aircraft, dim_component, dim_supplier: Master data
-- curated.fact_component_health_snapshot: Curated fact table (partitioned)
-- monitoring.data_quality_results: QC execution log
-- raw.component_health_quarantine: Rows failing critical rules
+**Output:**
 
-**Sanity Check**:
+- `raw.component_health_stg`: the raw extract.
+- `curated.dim_aircraft`, `dim_component`, `dim_supplier`: master data.
+- `curated.fact_component_health_snapshot`: the curated, partitioned fact table.
+- `monitoring.data_quality_results`: the quality control execution log.
+- `raw.component_health_quarantine`: rows that failed critical rules.
+
+**Sanity check:**
 
 ```sql
 SELECT tbl, COUNT(*) FROM (
@@ -364,47 +424,49 @@ SELECT tbl, COUNT(*) FROM (
 ) x GROUP BY tbl;
 ```
 
-#### Step 3: Feature Engineering & Model Training (Script 03)
+#### Step 3: Feature Engineering and Model Training (Script 03)
 
 ```bash
 psql -h <postgres_host> -U <admin_user> -d <database> -f 03_features_and_ml.sql
 ```
 
-**Output**:
-- features.component_health_features_v1: Engineered dataset
-- features.component_health_train/validation/test: Temporal splits
-- models.model_registry: 3 trained models with metadata
-- predictions.component_rul_predictions: Batch scoring results
+**Output:**
 
-**Verify Model Training**:
+- `features.component_health_features_v1`: the engineered dataset.
+- `features.component_health_train` / `validation` / `test`: the temporal splits.
+- `models.model_registry`: 3 trained models, with metadata.
+- `predictions.component_rul_predictions`: batch scoring results.
+
+**Verify model training:**
 
 ```sql
 SELECT model_name, model_version, is_active FROM models.model_registry;
 ```
 
-**Check Predictions**:
+**Check predictions:**
 
 ```sql
-SELECT 
+SELECT
   COUNT(*) AS total_predictions,
   COUNT(CASE WHEN risk_tier = 'High' THEN 1 END) AS high_risk,
   COUNT(CASE WHEN risk_tier = 'Elevated' THEN 1 END) AS elevated_risk
 FROM predictions.component_rul_predictions;
 ```
 
-#### Step 4: Monitoring, Drift Detection, & Automation (Script 04)
+#### Step 4: Monitoring, Drift Detection, and Automation (Script 04)
 
 ```bash
 psql -h <postgres_host> -U <admin_user> -d <database> -f 04_monitoring_and_retraining.sql
 ```
 
-**Output**:
-- monitoring.model_performance_log: Baseline metrics recorded
-- monitoring.data_drift_log: Initial drift baseline
-- monitoring.alerts: Open alerts from monitoring jobs
-- Scheduled pg_cron jobs (commented out for manual activation)
+**Output:**
 
-**Enable Scheduled Jobs** (optional; requires pg_cron):
+- `monitoring.model_performance_log`: baseline metrics recorded.
+- `monitoring.data_drift_log`: the initial drift baseline.
+- `monitoring.alerts`: open alerts raised by the monitoring jobs.
+- Scheduled pg_cron jobs (commented out by default, pending manual activation).
+
+**Enable scheduled jobs** (optional, requires pg_cron):
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS pg_cron;
@@ -426,12 +488,12 @@ SELECT cron.schedule('helios_monthly_partition', '0 0 1 * *',
 
 ---
 
-## Query Examples & Analytics
+## Query Examples and Analytics
 
 ### 1. Component Risk Ranking (for Maintenance Planning)
 
 ```sql
-SELECT 
+SELECT
   p.component_serial_number,
   c.component_type, c.component_subtype,
   c.part_cost_usd,
@@ -449,12 +511,12 @@ ORDER BY p.predicted_failure_prob_30d DESC
 LIMIT 50;
 ```
 
-**Use Case**: Fleet maintenance prioritization; identify components requiring immediate or near-term replacement.
+**Use case:** fleet maintenance prioritization, identifying components requiring immediate or near term replacement.
 
 ### 2. Aircraft Health Summary
 
 ```sql
-SELECT 
+SELECT
   a.aircraft_tail_number,
   a.aircraft_model,
   COUNT(*) AS total_components,
@@ -467,17 +529,17 @@ GROUP BY a.aircraft_tail_number, a.aircraft_model
 ORDER BY high_risk_count DESC;
 ```
 
-**Use Case**: Executive dashboard; fleet-wide health metrics and aircraft grounding risk.
+**Use case:** an executive dashboard, showing fleet wide health metrics and aircraft grounding risk.
 
 ### 3. Supplier Quality Correlation
 
 ```sql
-SELECT 
+SELECT
   s.supplier_id,
   s.supplier_quality_score,
   COUNT(c.component_serial_number) AS components_supplied,
   COUNT(CASE WHEN p.risk_tier IN ('High', 'Elevated') THEN 1 END) AS at_risk_components,
-  ROUND(100.0 * COUNT(CASE WHEN p.risk_tier IN ('High', 'Elevated') THEN 1 END) 
+  ROUND(100.0 * COUNT(CASE WHEN p.risk_tier IN ('High', 'Elevated') THEN 1 END)
         / NULLIF(COUNT(c.component_serial_number), 0), 2) AS risk_pct
 FROM curated.dim_supplier s
 LEFT JOIN curated.dim_component c ON c.supplier_id = s.supplier_id
@@ -487,12 +549,12 @@ GROUP BY s.supplier_id, s.supplier_quality_score
 ORDER BY risk_pct DESC;
 ```
 
-**Use Case**: Supply chain risk analysis; identify underperforming suppliers for escalation or corrective action.
+**Use case:** supply chain risk analysis, identifying underperforming suppliers for escalation or corrective action.
 
 ### 4. Model Performance Trending
 
 ```sql
-SELECT 
+SELECT
   model_name,
   metric_name,
   AVG(metric_value) AS avg_metric,
@@ -505,12 +567,12 @@ GROUP BY model_name, metric_name
 ORDER BY model_name, metric_name;
 ```
 
-**Use Case**: Model ops dashboard; track RMSE/MAE/precision/recall trends; identify degradation requiring retraining.
+**Use case:** a model operations dashboard, tracking RMSE, MAE, precision, and recall trends, and identifying degradation that requires retraining.
 
 ### 5. Data Quality Report
 
 ```sql
-SELECT 
+SELECT
   r.rule_name,
   r.rule_category,
   r.severity,
@@ -524,7 +586,7 @@ WHERE res.run_at = (SELECT MAX(run_at) FROM monitoring.data_quality_results)
 ORDER BY r.severity DESC, res.pass_rate_pct ASC;
 ```
 
-**Use Case**: Data governance reporting; ensure data quality before downstream consumption.
+**Use case:** data governance reporting, ensuring data quality before downstream consumption.
 
 ### 6. Active Alerts for Escalation
 
@@ -534,25 +596,25 @@ WHERE severity IN ('Warning', 'Critical')
 ORDER BY severity DESC, raised_at DESC;
 ```
 
-**Use Case**: Real-time alerting; escalate critical alerts to operations/maintenance teams.
+**Use case:** real time alerting, escalating critical alerts to operations and maintenance teams.
 
 ---
 
-## Access Control & Governance
+## Access Control and Governance
 
 ### Role Definitions
 
-| Role | Privileges | Use Case |
-|------|-----------|----------|
-| `role_data_engineer` | Full access to raw & curated schemas | Data pipeline ownership; dimension/fact table maintenance |
-| `role_ml_engineer` | Read curated/features; full access to models/predictions | Feature engineering, training, scoring, retraining |
-| `role_bi_reader` | Read-only curated, features, predictions | BI tool consumption (Power BI, Tableau, Looker) |
-| `role_auditor` | Read-only monitoring & mgmt schemas | Compliance auditing; audit trail review |
+| Role | Privileges | Use case |
+|---|---|---|
+| `role_data_engineer` | Full access to the raw and curated schemas | Data pipeline ownership; dimension and fact table maintenance |
+| `role_ml_engineer` | Read access to curated and features; full access to models and predictions | Feature engineering, training, scoring, and retraining |
+| `role_bi_reader` | Read only access to curated, features, and predictions | BI tool consumption (Power BI, Tableau, Looker) |
+| `role_auditor` | Read only access to the monitoring and mgmt schemas | Compliance auditing and audit trail review |
 
 ### Granting Roles
 
 ```sql
--- Add users to roles (replace 'username' with actual PostgreSQL user)
+-- Add users to roles (replace 'username' with an actual PostgreSQL user)
 GRANT role_data_engineer TO <username>;
 GRANT role_ml_engineer TO <username>;
 GRANT role_bi_reader TO <username>;
@@ -561,12 +623,12 @@ GRANT role_auditor TO <username>;
 
 ### Audit Trail
 
-Every INSERT, UPDATE, DELETE on `curated.fact_component_health_snapshot` is logged to `mgmt.audit_log`:
+Every INSERT, UPDATE, and DELETE on `curated.fact_component_health_snapshot` is logged to `mgmt.audit_log`:
 
 ```sql
-SELECT 
+SELECT
   audit_id, event_time, db_user, operation, row_pk,
-  row_hash  -- MD5 hash of row state (for integrity verification)
+  row_hash  -- an MD5 hash of the row state, for integrity verification
 FROM mgmt.audit_log
 WHERE schema_name = 'curated' AND table_name = 'fact_component_health_snapshot'
 ORDER BY event_time DESC
@@ -579,24 +641,24 @@ LIMIT 100;
 
 ### Feature Versioning
 
-Features are versioned by table (e.g., `component_health_features_v1`, `component_health_features_v2`):
+Features are versioned by table (for example, `component_health_features_v1`, `component_health_features_v2`):
 
-- **Immutable history**: Old feature versions retained for audit and model reproducibility
-- **Model Registry tracking**: Each model references its feature table (e.g., `features.component_health_features_v1`)
-- **A/B testing**: Train new models on new feature versions; compare performance; promote incrementally
+- **Immutable history:** old feature versions are retained for audit purposes and model reproducibility.
+- **Model registry tracking:** each model references its feature table (for example, `features.component_health_features_v1`).
+- **A/B testing:** new models can be trained on new feature versions, compared against existing models, and promoted incrementally.
 
 ### Handling Class Imbalance
 
-The 30-day and 90-day failure classifiers exhibit severe class imbalance:
+The 30 day and 90 day failure classifiers exhibit severe class imbalance:
 
-- **90-Day Model**: ~9% positive rate → Use recall-tuned decision thresholds; lower threshold → higher recall, more false positives
-- **30-Day Model**: ~4% positive rate → Consider SMOTE/class weighting; focus on precision for false-positive costs
+- **The 90 day model** has an approximately 9 percent positive rate; recall tuned decision thresholds are recommended, since a lower threshold produces higher recall at the cost of more false positives.
+- **The 30 day model** has an approximately 4 percent positive rate; approaches such as SMOTE or class weighting should be considered, with attention paid to precision given the cost of false positives.
 
-**Recommended threshold tuning** (via holdout validation set):
+**Recommended threshold tuning**, through a holdout validation set:
 
 ```sql
--- Vary threshold and compute Precision/Recall
-SELECT 
+-- Vary the threshold and compute precision and recall
+SELECT
   threshold,
   SUM(CASE WHEN p.predicted_failure_prob_30d > threshold AND f.failure_within_30_days = 1 THEN 1 ELSE 0 END)::NUMERIC
   / NULLIF(SUM(CASE WHEN p.predicted_failure_prob_30d > threshold THEN 1 END), 0) AS precision,
@@ -611,99 +673,99 @@ GROUP BY threshold
 ORDER BY threshold;
 ```
 
-### Human-in-the-Loop Feedback
+### Human in the Loop Feedback
 
-High-impact predictions (e.g., flight-critical components) should be reviewed by domain experts:
+High impact predictions, for example those concerning flight critical components, should be reviewed by domain experts:
 
 ```sql
 -- Record a human override
 INSERT INTO models.human_review_overrides
   (record_id, model_id, original_prediction, reviewer_decision, reviewer_id, reviewer_comment)
 VALUES
-  (12345, 1, '{"risk_tier": "High", "predicted_prob_30d": 0.68}'::jsonb, 
+  (12345, 1, '{"risk_tier": "High", "predicted_prob_30d": 0.68}'::jsonb,
    'Confirmed', 'maint_supervisor_001', 'Component inspection confirms imminent wear');
 ```
 
-These overrides feed the retraining pipeline:
+These overrides feed directly into the retraining pipeline:
 
 ```sql
--- Sample future training sets stratified by reviewer feedback
+-- Sample future training sets, stratified by reviewer feedback
 SELECT f.* FROM features.component_health_features_v1 f
 WHERE EXISTS (
   SELECT 1 FROM models.human_review_overrides h
-  WHERE h.record_id = f.record_id 
+  WHERE h.record_id = f.record_id
     AND h.reviewer_decision = 'Confirmed'
 )
 ORDER BY RANDOM() LIMIT 500;
 ```
 
-### Partitioning & Retention Policies
+### Partitioning and Retention Policies
 
 Monthly partitions enable efficient archival:
 
 ```sql
--- Archive old partition to cold storage (quarterly review)
+-- Archive an old partition to cold storage (as part of a quarterly review)
 -- After moving fact_component_health_snapshot_2023_06 offline:
 ALTER TABLE curated.fact_component_health_snapshot
 DETACH PARTITION curated.fact_component_health_snapshot_2023_06;
 
--- Validate and compress before long-term storage
+-- Validate and compress before long term storage
 VACUUM FULL ANALYZE curated.fact_component_health_snapshot_2023_06;
 ```
 
 ---
 
-## Business Case & ROI
+## Business Case and Return on Investment
 
 ### Key Use Cases
 
-1. **Component Health Assessment & RUL Estimation** ✓ (Implemented)
-   - Centralized component health monitoring across fleet
-   - Remaining useful life predictions for proactive planning
-   - Risk-stratified rankings for prioritized inspection
+1. **Component health assessment and RUL estimation** (implemented):
+   - Centralized component health monitoring across the fleet.
+   - Remaining useful life predictions, supporting proactive planning.
+   - Risk stratified rankings, for prioritized inspection.
 
-2. **Maintenance Optimization** (Enabled by Use Case 1)
-   - Shift from calendar-based to condition-based maintenance
-   - Target: 15–25% reduction in unscheduled downtime
-   - Pre-position spare parts 30/60/90 days ahead of predicted failures
+2. **Maintenance optimization** (enabled by use case 1):
+   - A shift from calendar based to condition based maintenance.
+   - Target: a 15 to 25 percent reduction in unscheduled downtime.
+   - Pre positioning spare parts 30, 60, or 90 days ahead of predicted failures.
 
-3. **Supply Chain Efficiency** (Enabled by Use Cases 1 & 2)
-   - Demand forecasting from predicted component retirements
-   - Reduce holding costs on excess inventory
-   - Minimize stock-outs by aligning procurement to predicted need
+3. **Supply chain efficiency** (enabled by use cases 1 and 2):
+   - Demand forecasting, based on predicted component retirements.
+   - Reduced holding costs on excess inventory.
+   - Minimized stockouts, by aligning procurement to predicted need.
 
-4. **Regulatory & Safety Compliance**
-   - Immutable audit trail for 14 CFR part 121 / EASA audit requirements
-   - Data quality enforcement prevents unsafe operational decisions
-   - Model governance and explainability support certification bodies
+4. **Regulatory and safety compliance:**
+   - An immutable audit trail, supporting 14 CFR Part 121 and EASA audit requirements.
+   - Data quality enforcement, which helps prevent unsafe operational decisions.
+   - Model governance and explainability, supporting certification bodies.
 
 ### Quantified Benefits (Illustrative)
 
 | Metric | Baseline | Target | Driver |
-|--------|----------|--------|--------|
-| Unscheduled Downtime | 12% of flight hours | 8–10% | Predictive RUL + 30/60-day warning horizon |
-| Spare Parts Carrying Cost | $50M annually | $35–40M | Improved demand forecasting |
-| Maintenance Margin | 18% cost overage | 8–10% | Condition-based vs. calendar-based scheduling |
-| Audit Findings (Compliance) | 2–3 per year | <1 per year | Automated data quality + audit trail |
+|---|---|---|---|
+| Unscheduled downtime | 12 percent of flight hours | 8 to 10 percent | Predictive RUL, combined with a 30 to 60 day warning horizon |
+| Spare parts carrying cost | $50 million annually | $35 to $40 million | Improved demand forecasting |
+| Maintenance margin | An 18 percent cost overage | 8 to 10 percent | Condition based scheduling, rather than calendar based scheduling |
+| Audit findings (compliance) | 2 to 3 per year | Fewer than 1 per year | Automated data quality, together with the audit trail |
 
 ---
 
-## Support & Maintenance
+## Support and Maintenance
 
 ### Troubleshooting
 
-**Issue**: Feature build is slow (>10 minutes)
+**Issue: the feature build is slow, taking more than 10 minutes.**
 
-→ Add index on `fact_component_health_snapshot(snapshot_date)` and `dim_component(design_mtbf_hours)`
+Add an index on `fact_component_health_snapshot(snapshot_date)` and `dim_component(design_mtbf_hours)`:
 
 ```sql
 ANALYZE curated.fact_component_health_snapshot;
 ANALYZE curated.dim_component;
 ```
 
-**Issue**: Data quality rule failing at load time
+**Issue: a data quality rule is failing at load time.**
 
-→ Review `monitoring.data_quality_results` for the specific rule and failing rows:
+Review `monitoring.data_quality_results` for the specific rule and its failing rows:
 
 ```sql
 SELECT rule_name, rows_checked, rows_failed, pass_rate_pct
@@ -712,26 +774,26 @@ WHERE run_at = (SELECT MAX(run_at) FROM monitoring.data_quality_results)
 ORDER BY passed, severity DESC;
 ```
 
-→ Route failing rows to quarantine and inspect:
+Route the failing rows to quarantine and inspect them:
 
 ```sql
-SELECT * FROM raw.component_health_quarantine 
+SELECT * FROM raw.component_health_quarantine
 WHERE quarantined_at > now() - INTERVAL '1 day'
 ORDER BY quarantined_at DESC;
 ```
 
-**Issue**: Model performance has degraded
+**Issue: model performance has degraded.**
 
-→ Check for data drift:
+Check for data drift:
 
 ```sql
-SELECT * FROM monitoring.data_drift_log 
+SELECT * FROM monitoring.data_drift_log
 WHERE evaluated_at > now() - INTERVAL '7 days'
 AND drift_flag = TRUE
 ORDER BY evaluated_at DESC;
 ```
 
-→ If drift detected, trigger retraining:
+If drift is detected, trigger retraining:
 
 ```sql
 SELECT model_name, reason FROM mgmt.retraining_required();
@@ -740,40 +802,40 @@ SELECT model_name, reason FROM mgmt.retraining_required();
 ### Maintenance Schedule
 
 | Task | Frequency | Owner | Notes |
-|------|-----------|-------|-------|
-| Review open alerts | Daily | Ops/Maintenance | Escalate Critical alerts within 2 hours |
-| Model performance review | Weekly | ML Engineer | Check RMSE/Recall trends; adjust thresholds if needed |
-| Data drift assessment | Weekly | Data Engineer | Investigate >15% shifts in key features |
-| Retraining validation | Monthly | ML Engineer | Retrain if Critical alerts raised; A/B test vs. current model |
-| Audit log review | Quarterly | Compliance Officer | Verify immutability; export for regulatory file |
-| Partition management | Monthly (1st) | DBA | Ensure next month's partition pre-created |
+|---|---|---|---|
+| Review open alerts | Daily | Operations and maintenance | Escalate Critical alerts within 2 hours |
+| Model performance review | Weekly | ML engineer | Check RMSE and recall trends; adjust thresholds if needed |
+| Data drift assessment | Weekly | Data engineer | Investigate shifts greater than 15 percent in key features |
+| Retraining validation | Monthly | ML engineer | Retrain if Critical alerts have been raised; A/B test against the current model |
+| Audit log review | Quarterly | Compliance officer | Verify immutability; export for the regulatory file |
+| Partition management | Monthly, the 1st | Database administrator | Ensure next month's partition has been pre created |
 
 ---
 
-## Integration with BI & Analytics Platforms
+## Integration with BI and Analytics Platforms
 
-### Power BI / Tableau
+### Power BI and Tableau
 
-**Primary Views for BI Consumption**:
+**Primary views for BI consumption:**
 
-1. `predictions.vw_latest_component_risk` — Component risk rankings with joinable aircraft/component/supplier data
-2. `monitoring.vw_open_alerts` — Active alerts feed
-3. Ad-hoc queries against `curated.dim_*` and `monitoring.model_performance_log`
+1. `predictions.vw_latest_component_risk`: component risk rankings, joinable with aircraft, component, and supplier data.
+2. `monitoring.vw_open_alerts`: the active alerts feed.
+3. Ad hoc queries against `curated.dim_*` and `monitoring.model_performance_log`.
 
-**Refresh Cadence**:
+**Refresh cadence:**
 
-- Predictions: Batch scored nightly; Power BI dataset refresh at 06:00 UTC
-- Monitoring: Real-time queries (if Power BI connected directly to PostgreSQL); refresh every 5 minutes
-- Dimensions: Daily (manual or scheduled Pull)
+- **Predictions:** batch scored nightly; the Power BI dataset refreshes at 06:00 UTC.
+- **Monitoring:** near real time queries, if Power BI is connected directly to PostgreSQL, refreshed every 5 minutes.
+- **Dimensions:** refreshed daily, either manually or on a scheduled pull.
 
-**Authentication**: PostgreSQL role-based (e.g., `role_bi_reader` user via Power BI service principal)
+**Authentication:** PostgreSQL role based access, for example a `role_bi_reader` user accessed through a Power BI service principal.
 
 ### Export Patterns
 
-For air-gapped environments or external systems:
+For air gapped environments or external systems:
 
 ```sql
--- Export latest predictions for external BI tool
+-- Export the latest predictions for an external BI tool
 COPY (
   SELECT * FROM predictions.vw_latest_component_risk
   WHERE scored_at >= now() - INTERVAL '1 day'
@@ -782,44 +844,44 @@ COPY (
 
 ---
 
-## Future Enhancements & Roadmap
+## Future Enhancements and Roadmap
 
 ### Phase 2 (Planned)
 
-- **Multi-Model Ensemble**: Combine XGBoost RUL + probabilistic Bayesian model for uncertainty quantification
-- **Explainability Layer**: SHAP values computed in SQL (PostgresML extension) to explain individual predictions
-- **Real-Time Scoring**: gRPC/REST API wrapper around PostgresML for live component health ingestion
-- **Causal Inference**: Estimate maintenance intervention impact on component longevity (instrumental variable estimation)
+- **A multi model ensemble.** Combine the XGBoost RUL model with a probabilistic Bayesian model, for uncertainty quantification.
+- **An explainability layer.** SHAP values computed directly in SQL, through a PostgresML extension, to explain individual predictions.
+- **Real time scoring.** A gRPC or REST API wrapper around PostgresML, for live component health ingestion.
+- **Causal inference.** Estimating the impact of a maintenance intervention on component longevity, using instrumental variable estimation.
 
 ### Phase 3 (Future)
 
-- **Supply Chain Integration**: Link to OEM parts databases for automatic availability checking
-- **Prescriptive Analytics**: Optimization engine for cost-optimal maintenance scheduling across fleet
-- **Autonomous Retraining**: Fully automated retraining pipeline with statistical significance tests and canary deployment
+- **Supply chain integration.** Links to OEM parts databases, for automatic availability checking.
+- **Prescriptive analytics.** An optimization engine for cost optimal maintenance scheduling across the fleet.
+- **Autonomous retraining.** A fully automated retraining pipeline, incorporating statistical significance tests and canary deployment.
 
 ---
 
 ## Conclusion
 
-HELIOS represents a **production-grade, SQL-native ML platform** built on PostgreSQL that delivers **measurable business value** across maintenance optimization, supply chain efficiency, and regulatory compliance. By bringing data engineering, feature engineering, model training, and monitoring into a single SQL-first system, HELIOS eliminates data silos, ensures auditability, and enables rapid iteration on predictive maintenance use cases.
+HELIOS represents a production grade, SQL native machine learning platform built on PostgreSQL that delivers measurable business value across maintenance optimization, supply chain efficiency, and regulatory compliance. By bringing data engineering, feature engineering, model training, and monitoring into a single SQL first system, HELIOS eliminates data silos, ensures auditability, and enables rapid iteration on predictive maintenance use cases.
 
-The modular design allows incremental adoption: start with Use Case A (component health assessment) and scale to fleet-wide predictive maintenance orchestration. The declarative data quality framework and comprehensive audit trail satisfy enterprise governance requirements while maintaining the agility needed for competitive advantage in aviation operations.
+The modular design allows incremental adoption: a team can start with use case one, component health assessment, and scale toward fleet wide predictive maintenance orchestration. The declarative data quality framework and the comprehensive audit trail satisfy enterprise governance requirements while maintaining the agility needed for competitive advantage in aviation operations.
 
 ---
 
 ## License
 
-MIT License — See [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
-## Contact & Support
+## Contact and Support
 
 For questions, issues, or contributions:
 
-- **Project Owner**: ANTHONY CHINEDU ECHEM
-- **Repository**: [HELIOS_AIRCRAFT_GROUP_IN_DATABASE_ML_PROJECT](https://github.com/ANTHONY-CHINEDU-ECHEM/HELIOS_AIRCRAFT_GROUP_IN_DATABASE_ML_PROJECT)
-- **Issues**: GitHub Issues (for bugs, feature requests, documentation)
+- **Project owner:** Anthony Chinedu Echem
+- **Repository:** [HELIOS_AIRCRAFT_GROUP_IN_DATABASE_ML_PROJECT](https://github.com/ANTHONY-CHINEDU-ECHEM/HELIOS_AIRCRAFT_GROUP_IN_DATABASE_ML_PROJECT)
+- **Issues:** GitHub Issues, for bugs, feature requests, and documentation.
 
 ---
 
-**Last Updated**: September 16, 2026  
-**Version**: 1.0 (Production Ready)
+**Last updated:** September 16, 2026
+**Version:** 1.0 (Production Ready)
